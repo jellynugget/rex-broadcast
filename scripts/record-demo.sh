@@ -95,16 +95,19 @@ EOF
 }
 
 echo "making the demo session"
-json=$("$rex" new broadcast-demo --json -c "$HOME") || exit 1
+# Each pane runs zsh -f: no startup files, so no plugins such as
+# autosuggestions showing your shell history, and no history file.
+json=$("$rex" new broadcast-demo --json -c "$HOME" -- zsh -f) || exit 1
 session=$(printf '%s\n' "$json" | sed -n 's/.*"session_id": *"\([^"]*\)".*/\1/p' | head -1)
-"$rex" split -s "$session" --focus=false >/dev/null
-"$rex" split -s "$session" --split=below --focus=false >/dev/null
-# Go to ~, clear the screen, and label the panes server-1..3.
+"$rex" split -s "$session" --focus=false -- zsh -f >/dev/null
+"$rex" split -s "$session" --split=below --focus=false -- zsh -f >/dev/null
+# Set a prompt without the host name, go to ~, clear the screen, and label
+# the panes server-1..3.
 n=0
 for b in $("$rex" api call session.view "{\"session_id\":\"$session\"}" |
            grep -o '"block_id": *"block:[^"]*"' | sed 's/.*"\(block:[^"]*\)"/\1/' | awk '!seen[$0]++'); do
   n=$((n + 1))
-  "$rex" send -b "$b" $'cd ~ && clear\r' >/dev/null
+  "$rex" send -b "$b" $'PROMPT=\'%F{cyan}%~%f %F{green}$%f \'; cd ~; clear\r' >/dev/null
   "$rex" api call session.set_block_label \
     "{\"session_id\":\"$session\",\"block_id\":\"$b\",\"label\":\"server-$n\"}" >/dev/null
 done
@@ -170,7 +173,7 @@ echo "captured $frames frames at $fps fps"
 
 mkdir -p "$(dirname "$out")"
 ffmpeg -loglevel error -y -framerate "$fps" -i "$work/frames/%05d.png" \
-  -vf "fps=12,scale=900:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=none" \
+  -vf "fps=10,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=none" \
   "$out" || exit 1
 echo "wrote $out ($(du -h "$out" | cut -f1))"
 # The GIF is meant for a public README: check that it shows only the demo
