@@ -2,8 +2,9 @@
 --
 -- Press cmd+shift+i to start broadcasting in the current tab: each typing key
 -- is then sent to every terminal pane in that tab, and each of those panes
--- shows a broadcast icon and "Broadcasting · Esc to stop" after the name in
--- its header. Press cmd+shift+i again, or Escape, to stop.
+-- shows a broadcast icon and "Broadcasting · ⇧⌘I to stop" after the name in
+-- its header. Press cmd+shift+i again to stop. Escape is broadcast like any
+-- other key, since fzf, vim and many prompts need it.
 --
 -- This does not use a Rex key mode, because Rex shows a pop-up listing every
 -- key of an active mode, and that cannot be turned off. Instead each typing
@@ -21,7 +22,7 @@
 --
 --   require("broadcast").setup{
 --     key = "cmd+shift+i",  -- starts and stops broadcasting
---     stop_key = "escape",  -- also stops it; false to send Escape to the panes
+--     stop_key = false,     -- another key that also stops it, such as "escape"
 --   }
 
 local M = {}
@@ -45,7 +46,7 @@ end
 -- filled in by setup().
 local OPTIONS = {
   key = { types = { string = true }, default = "cmd+shift+i" },
-  stop_key = { types = { string = true, boolean = true }, default = "escape" },
+  stop_key = { types = { string = true, boolean = true }, default = false },
   state_file = { types = { string = true } },  -- where state is kept; for tests
 }
 
@@ -69,18 +70,42 @@ local function utf8_chars(text)
   return chars
 end
 
--- The mark for a given stop key, such as "  ((•)) Broadcasting · Esc to stop".
-local function make_mark(stop_key)
-  local note = " Broadcasting"
-  if stop_key == "escape" then
-    note = note .. " \194\183 Esc to stop"  -- \194\183 is "·"
+-- A key in Rex's binding syntax, written the way macOS menus show it, such
+-- as "⇧⌘I" for "cmd+shift+i".
+local MOD_SYMBOLS = {
+  ctrl = "\226\140\131", alt = "\226\140\165", opt = "\226\140\165", option = "\226\140\165",
+  shift = "\226\135\167", cmd = "\226\140\152", super = "\226\140\152",
+}
+local MOD_ORDER = { "ctrl", "alt", "opt", "option", "shift", "cmd", "super" }  -- macOS order: ⌃⌥⇧⌘
+local KEY_NAMES = { escape = "Esc", space = "Space", enter = "\226\134\169", tab = "\226\135\165",
+  backspace = "\226\140\171", delete = "\226\140\166" }
+local function format_key(key)
+  local parts = {}
+  for part in key:gmatch("[^+]+") do parts[#parts + 1] = part:lower() end
+  local base = table.remove(parts) or ""
+  local held = {}
+  for _, mod in ipairs(parts) do held[mod] = true end
+  local out = ""
+  for _, mod in ipairs(MOD_ORDER) do
+    if held[mod] and not out:find(MOD_SYMBOLS[mod], 1, true) then out = out .. MOD_SYMBOLS[mod] end
   end
-  return "  " .. ICON .. note
+  if KEY_NAMES[base] then return out .. KEY_NAMES[base] end
+  if #base == 1 then return out .. base:upper() end
+  return out .. base:sub(1, 1):upper() .. base:sub(2)
+end
+M.format_key = format_key
+
+-- The mark shown after each pane's name, such as
+-- "  ((•)) Broadcasting · ⇧⌘I to stop". It names stop_key if set, since that
+-- is the quicker key, and the toggle key otherwise.
+local function make_mark(key, stop_key)
+  local how = format_key(stop_key or key)
+  return "  " .. ICON .. " Broadcasting \194\183 " .. how .. " to stop"  -- \194\183 is "·"
 end
 
 -- name plus mark, shortening the name so the label fits Rex's limit.
 local function marked_label(name, mark)
-  mark = mark or mark_text or make_mark("escape")
+  mark = mark or mark_text or make_mark(OPTIONS.key.default, false)
   local room = MAX_LABEL - #utf8_chars(mark)
   local chars = utf8_chars(name)
   if #chars > room then
@@ -330,7 +355,7 @@ M.typing_keys = typing_keys
 -- Set up broadcasting: bind the keys and add the actions. Returns the module.
 function M.setup(given)
   opts = check_options(given)
-  mark_text = make_mark(opts.stop_key)
+  mark_text = make_mark(opts.key, opts.stop_key)
   state = load_state()
 
   rex.action{
@@ -370,7 +395,7 @@ function M.setup(given)
     end)
   end
   if opts.stop_key ~= "escape" and opts.key ~= "escape" then
-    bcast("escape", "\27")  -- Escape is free, so broadcast it like any key
+    bcast("escape", "\27")  -- Escape isn't a stop key, so broadcast it like any key
   end
 
   return M

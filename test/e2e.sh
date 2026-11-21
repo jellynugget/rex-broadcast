@@ -41,7 +41,9 @@ session=""
 
 cleanup() {
   if [[ -n $session ]]; then
-    "$rex" send-key -s "$session" escape >/dev/null 2>&1
+    if grep -qF "$session" "$state_file" 2>/dev/null; then
+      "$rex" send-key -s "$session" cmd+shift+i >/dev/null 2>&1
+    fi
     "$rex" kill "$session" >/dev/null 2>&1
   fi
   # Remove state left behind if the test stopped while broadcasting.
@@ -103,11 +105,13 @@ long_label_chars() {
 check "a long multibyte name is shortened to 128 characters" long_label_chars
 
 echo "setting up a throwaway session"
-out=$("$rex" new "$label" --json -c "$work") || { echo "could not create a session"; exit 1; }
+# zsh -f reads no startup files, so your shell plugins and settings don't
+# change what the panes do with the keys.
+out=$("$rex" new "$label" --json -c "$work" -- zsh -f) || { echo "could not create a session"; exit 1; }
 session=$(printf '%s\n' "$out" | sed -n 's/.*"session_id": *"\([^"]*\)".*/\1/p' | head -1)
 [[ -n $session ]] || { echo "could not read the session ID"; exit 1; }
-"$rex" split -s "$session" --focus=false >/dev/null || exit 1
-"$rex" split -s "$session" --focus=false >/dev/null || exit 1
+"$rex" split -s "$session" --focus=false -- zsh -f >/dev/null || exit 1
+"$rex" split -s "$session" --focus=false -- zsh -f >/dev/null || exit 1
 check "the session has three panes" wait_for test "$(blocks | wc -l | tr -d ' ')" -eq 3
 
 echo "starting"
@@ -119,8 +123,16 @@ echo "typing"
 type_text "echo broadcast 1" && "$rex" send-key -s "$session" enter >/dev/null
 check "every pane runs the command" wait_for showing "broadcast 1" 3
 
-echo "stopping with Escape"
+echo "Escape while broadcasting"
 "$rex" send-key -s "$session" escape >/dev/null
+sleep 0.5
+check "Escape doesn't stop broadcasting" all_labels_mark
+# Escape reached the shells; in vi mode it leaves insert mode. Ctrl-C gives
+# each pane a fresh prompt.
+"$rex" send-key -s "$session" ctrl+c >/dev/null
+
+echo "stopping with cmd+shift+i"
+"$rex" send-key -s "$session" cmd+shift+i >/dev/null
 check "the headers go back to normal" wait_for no_label_marks
 check "the state file is removed" wait_for test ! -e "$state_file"
 
@@ -128,7 +140,7 @@ echo "typing after stopping"
 type_text "echo focused 2" && "$rex" send-key -s "$session" enter >/dev/null
 check "only the focused pane runs the command" wait_for showing "focused 2" 1
 
-echo "toggling with cmd+shift+i"
+echo "starting again"
 "$rex" send-key -s "$session" cmd+shift+i >/dev/null
 check "cmd+shift+i starts" wait_for all_labels_mark
 "$rex" send-key -s "$session" cmd+shift+i >/dev/null

@@ -14,8 +14,11 @@ It is a Rex config module (Lua), not a separate program.
 
 | Key | What it does |
 |---|---|
-| `cmd+shift+i` | Start broadcasting in this tab. Each pane shows **((•)) Broadcasting · Esc to stop** after its name in the header. |
-| `cmd+shift+i` again, or `Escape` | Stop broadcasting. The headers go back to normal. |
+| `cmd+shift+i` | Start broadcasting in this tab. Each pane shows **((•)) Broadcasting · ⇧⌘I to stop** after its name in the header. |
+| `cmd+shift+i` again | Stop broadcasting. The headers go back to normal. |
+
+`Escape` doesn't stop broadcasting: it goes to every pane like any other key,
+since fzf, vim, and coding agents' prompts all use it.
 
 Broadcasting belongs to the tab where you started it. Switch to another tab
 and your keys go to the focused pane as usual; switch back and they are
@@ -27,7 +30,7 @@ While broadcasting, the keys below go to every pane. Other keys, such as
 
 - Letters, with `shift` and `ctrl`
 - Digits and punctuation, with `shift` (US keyboard layout)
-- `space`, `enter`, `tab`, `shift+tab`, `backspace`, `alt+backspace`, `delete`
+- `space`, `enter`, `tab`, `shift+tab`, `escape`, `backspace`, `alt+backspace`, `delete`
 - Arrow keys, `home`, `end`, `pageup`, `pagedown`
 
 The command palette also has **Broadcast: Start**, **Stop** and **Toggle
@@ -73,12 +76,14 @@ Pass options to `setup` in `init.lua`. All are optional.
 ```lua
 require("broadcast").setup{
   key = "cmd+shift+i",  -- starts and stops broadcasting
-  stop_key = "escape",  -- also stops it; false to send Escape to the panes
+  stop_key = false,     -- another key that also stops it, such as "escape"
 }
 ```
 
-With `stop_key = false`, `Escape` is broadcast like any other key, which you
-need for programs such as vim, and the header shows only **Broadcasting**.
+The header names the key that stops broadcasting, written as macOS menus
+write it: `key = "ctrl+b"` shows **⌃B to stop**. With `stop_key = "escape"`,
+`Escape` stops broadcasting instead of reaching the panes, and the header
+shows **Esc to stop**.
 An option of the wrong type, or an unknown option, is ignored and logged.
 
 ## How it works
@@ -101,7 +106,7 @@ An option of the wrong type, or an unknown option, is ignored and logged.
 - **Header mark.** Rex has no way for a config to add an icon next to the pane
   header buttons, so the mark goes in each pane's label. Starting sets the
   label to the name Rex normally shows (program and folder), then the SF
-  Symbol `dot.radiowaves.left.and.right` and "Broadcasting · Esc to stop".
+  Symbol `dot.radiowaves.left.and.right` and "Broadcasting · ⇧⌘I to stop".
   The symbol is the private-use character U+100319, which macOS draws as an
   icon in the system font. Labels are plain text, so there is no color or
   background. A long name is shortened with "…" to fit Rex's 128-character
@@ -113,8 +118,6 @@ An option of the wrong type, or an unknown option, is ignored and logged.
 - Paste, input methods (such as emoji or CJK input), and the mouse are not
   mirrored.
 - Punctuation assumes a US keyboard layout.
-- With the default `stop_key`, `Escape` stops broadcasting, so it can't be
-  sent to the panes. Set `stop_key = false` to send it.
 - Every bound key passes through a Lua function, even while broadcasting is
   off, which adds a round trip to the Rex server for each key. It was not
   noticeable in testing. If typing ever feels slow, remove the

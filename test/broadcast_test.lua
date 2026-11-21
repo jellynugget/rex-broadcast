@@ -110,6 +110,15 @@ do
   check("no warnings with no options", #fake:warnings() == 0, show(fake:warnings()))
 end
 do
+  local fake, M, sid, wid, panes = tab(2)
+  fake:press("cmd+shift+i")
+  local label = fake:pane(panes[1]).label
+  check("by default the header names the toggle key", contains(label, "Broadcasting \194\183 \226\135\167\226\140\152I to stop"), label)
+  check("by default Escape is broadcast", fake:press("escape") == true
+    and all_equal(outputs(fake, panes), "\27"), show(outputs(fake, panes)))
+  check("by default Escape doesn't stop broadcasting", M.active() and contains(fake:pane(panes[1]).label, ICON))
+end
+do
   local fake = load({ key = "ctrl+b" })
   local sid = fake:add_session()
   local _, panes = fake:add_window(sid, 2)
@@ -119,17 +128,27 @@ do
     all_equal(outputs(fake, panes), "") and fake:pane(panes[1]).label:find(ICON, 1, true) ~= nil)
 end
 do
-  local fake = load({ stop_key = false })
+  local fake, M = load({ stop_key = "escape" })
   local sid = fake:add_session()
   local _, panes = fake:add_window(sid, 2)
-  check("with stop_key = false, Escape goes to the pane while off", fake:press("escape") == false)
+  check("with stop_key = \"escape\", Escape goes to the pane while off", fake:press("escape") == false)
   fake:press("cmd+shift+i")
   local label = fake:pane(panes[1]).label
-  check("stop_key = false leaves \"Esc to stop\" out of the header",
-    contains(label, "Broadcasting") and not contains(label, "Esc"), label)
-  check("with stop_key = false, Escape is broadcast", fake:press("escape") == true
-    and all_equal(outputs(fake, panes), "\27"), show(outputs(fake, panes)))
-  check("and doesn't stop broadcasting", contains(fake:pane(panes[1]).label, ICON))
+  check("with stop_key = \"escape\", the header says Esc to stop",
+    contains(label, "Broadcasting \194\183 Esc to stop"), label)
+  check("with stop_key = \"escape\", Escape stops", fake:press("escape") == true and not M.active())
+  check("and isn't written to the panes", all_equal(outputs(fake, panes), ""), show(outputs(fake, panes)))
+  check("and the labels come back", fake:pane(panes[1]).label == "shell")
+  fake:press("cmd+shift+i")
+  check("cmd+shift+i still stops too", fake:press("cmd+shift+i") == true and not M.active())
+end
+do
+  local _, M = load()
+  check("cmd+shift+i is shown as \226\135\167\226\140\152I", M.format_key("cmd+shift+i") == "\226\135\167\226\140\152I", M.format_key("cmd+shift+i"))
+  check("modifiers go in macOS order whatever the input order",
+    M.format_key("cmd+alt+ctrl+shift+k") == "\226\140\131\226\140\165\226\135\167\226\140\152K")
+  check("escape is shown as Esc", M.format_key("escape") == "Esc")
+  check("a named key is capitalized", M.format_key("ctrl+f5") == "\226\140\131F5")
 end
 do
   local fake = load({ key = 42, stop_key = true, colour = "red" })
@@ -178,7 +197,7 @@ do
   check("M.active() is true", M.active() == true)
   local label = fake:pane(panes[1]).label
   check("each header shows the pane's name, then the icon and note",
-    label == "zsh ~/project  " .. ICON .. " Broadcasting \194\183 Esc to stop", label)
+    label == "zsh ~/project  " .. ICON .. " Broadcasting \194\183 \226\135\167\226\140\152I to stop", label)
   check("every pane in the tab is marked", fake:pane(panes[3]).label == label)
   check("the state file is written", read_file(state_file) ~= nil)
   check("nothing is typed into the panes", all_equal(outputs(fake, panes), ""))
@@ -251,7 +270,7 @@ do
   check("up sends ESC [ A", seen["up"] == "\27[A")
   check("shift+tab sends ESC [ Z", seen["shift+tab"] == "\27[Z")
   check("shift+' sends a double quote", seen["shift+'"] == '"')
-  check("escape is not a typing key (it stops broadcasting)", seen["escape"] == nil)
+  check("escape is bound apart from the typing keys, as it may be a stop key", seen["escape"] == nil)
 end
 
 ------------------------------------------------------------------------------
@@ -284,14 +303,14 @@ do
   local fake, M, sid, wid, panes = tab(2)
   fake:pane(panes[2]).label = "my server"
   fake:press("cmd+shift+i")
-  check("Escape is handled", fake:press("escape") == true)
+  check("cmd+shift+i again is handled", fake:press("cmd+shift+i") == true)
   check("broadcasting is off", not M.active())
   check("the default label comes back", fake:pane(panes[1]).label == "shell", fake:pane(panes[1]).label)
   check("a custom label comes back", fake:pane(panes[2]).label == "my server", fake:pane(panes[2]).label)
   check("the state file is removed", read_file(state_file) == nil)
   check("Escape after stopping goes to the pane", fake:press("escape") == false)
   check("keys after stopping go to the pane", fake:press("a") == false)
-  check("Escape is never written to the panes", all_equal(outputs(fake, panes), ""))
+  check("nothing is written to the panes", all_equal(outputs(fake, panes), ""))
 end
 do
   local fake, M, sid, wid, panes = tab(2)
@@ -303,7 +322,7 @@ do
   local fake, M, sid, wid, panes = tab(1)
   fake:pane(panes[1]).label = ""
   fake:press("cmd+shift+i")
-  fake:press("escape")
+  fake:press("cmd+shift+i")
   check("an empty label comes back as \"shell\", not \"Block xxxx\"", fake:pane(panes[1]).label == "shell")
 end
 do
@@ -321,7 +340,7 @@ do
   fake:type("z")
   check("a new pane gets the key", fake:pane(new).output == "z")
   check("a new pane gets the mark", contains(fake:pane(new).label, ICON))
-  fake:press("escape")
+  fake:press("cmd+shift+i")
   check("a new pane's label comes back on stop", fake:pane(new).label == "shell")
 end
 do
@@ -331,7 +350,7 @@ do
   local ok, err = pcall(fake.type, fake, "q")
   check("typing after a pane closed doesn't raise", ok, err)
   check("the open panes still get keys", fake:pane(panes[1]).output == "q" and fake:pane(panes[3]).output == "q")
-  ok, err = pcall(fake.press, fake, "escape")
+  ok, err = pcall(fake.press, fake, "cmd+shift+i")
   check("stopping after a pane closed doesn't raise", ok, err)
   check("the open panes' labels come back", fake:pane(panes[1]).label == "shell" and fake:pane(panes[3]).label == "shell")
 end
@@ -340,7 +359,7 @@ do
   fake:press("cmd+shift+i")
   fake:close_pane(panes[2])
   fake.raise_errors = true
-  local ok, err = pcall(function() fake:type("q"); fake:press("escape") end)
+  local ok, err = pcall(function() fake:type("q"); fake:press("cmd+shift+i") end)
   check("a rex that raises on a closed pane doesn't break typing or stopping", ok, err)
   check("and the other labels still come back", fake:pane(panes[3]).label == "shell")
 end
@@ -391,7 +410,7 @@ do
   check("broadcasting stays on after a reload", M.active())
   fake:type("r")
   check("keys are still broadcast after a reload", all_equal(outputs(fake, panes), "r"))
-  fake:press("escape")
+  fake:press("cmd+shift+i")
   check("labels from before the reload come back",
     fake:pane(panes[1]).label == "shell" and fake:pane(panes[2]).label == "api", fake:pane(panes[2]).label)
   M = reload(fake)
@@ -433,7 +452,7 @@ do
   local fake, M = load({ state_file = tmp .. "/no-such-dir-" .. os.time() .. "/state.json" })
   local sid = fake:add_session()
   local _, panes = fake:add_window(sid, 2)
-  local ok, err = pcall(function() fake:press("cmd+shift+i"); fake:type("s"); fake:press("escape") end)
+  local ok, err = pcall(function() fake:press("cmd+shift+i"); fake:type("s"); fake:press("cmd+shift+i") end)
   check("a state file that can't be written doesn't break broadcasting", ok, err)
   check("keys were broadcast", all_equal(outputs(fake, panes), "s"))
 end
@@ -446,7 +465,7 @@ do
   M = reload(fake)
   check("with the state file gone, broadcasting is off", not M.active())
   fake:press("cmd+shift+i")
-  fake:press("escape")
+  fake:press("cmd+shift+i")
   check("a label still showing an old mark isn't put back with the mark",
     not contains(fake:pane(panes[1]).label, ICON) and not contains(fake:pane(panes[2]).label, ICON),
     fake:pane(panes[2]).label)
@@ -477,7 +496,7 @@ end
 section("shortening long names")
 do
   local _, M = load()
-  local mark = "  " .. ICON .. " Broadcasting \194\183 Esc to stop"
+  local mark = "  " .. ICON .. " Broadcasting \194\183 \226\135\167\226\140\152I to stop"
   local room = 128 - count_chars(mark)
   check("a short name is kept", M.marked_label("zsh ~") == "zsh ~" .. mark)
   local exact = string.rep("a", room)

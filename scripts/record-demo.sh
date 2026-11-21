@@ -194,7 +194,7 @@ sleep 1.2
 key cmd+shift+i; sleep 1.5
 keys "echo hello from every pane"; key enter; sleep 1.2
 keys "tty"; key enter; sleep 1.8
-key escape; sleep 1.2
+key cmd+shift+i; sleep 1.2
 keys "echo just this one"; key enter; sleep 2.5
 
 touch "$work/stop"; wait "$recorder"; recorder=""
