@@ -11,10 +11,20 @@ set -eu
 REPO="$(cd "$(dirname "$0")" && pwd)"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/rex"
 INIT="$CONFIG_DIR/init.lua"
-REQUIRE='require("broadcast")'
+REQUIRE='require("broadcast").setup()'
+# The line older versions added, which no longer binds any keys by itself.
+OLD_REQUIRE='require("broadcast")'
 FILES="broadcast.lua"
 # Files older versions installed; removed if they are links into this repo.
 OLD_FILES="broadcast-banner.sh"
+
+# remove_line LINE: delete every line of init.lua that is exactly LINE.
+# grep -v exits 1 when it prints nothing, as when LINE was the only line, so
+# that status is ignored.
+remove_line() {
+  { grep -vxF "$1" "$INIT" || true; } > "$INIT.tmp"
+  mv "$INIT.tmp" "$INIT"
+}
 
 find_rex() {
   if command -v rex >/dev/null 2>&1; then command -v rex; return; fi
@@ -38,9 +48,16 @@ if [ "${1:-}" = "--uninstall" ]; then
     if [ -L "$CONFIG_DIR/$f" ]; then rm "$CONFIG_DIR/$f"; echo "removed $CONFIG_DIR/$f"; fi
   done
   rm -f "$CONFIG_DIR/.broadcast-state.json"
-  if [ -f "$INIT" ] && grep -qxF "$REQUIRE" "$INIT"; then
-    grep -vxF "$REQUIRE" "$INIT" > "$INIT.tmp" && mv "$INIT.tmp" "$INIT"
-    echo "removed $REQUIRE from $INIT"
+  if [ -f "$INIT" ]; then
+    # Every require("broadcast") line, with or without setup options, whose
+    # call ends on the same line. A call spread over several lines is left
+    # alone, since removing only its first line would break init.lua.
+    { grep -vE '^[[:space:]]*require\("broadcast"\)(\.setup(\(\)|\(?\{.*\}\)?))?[[:space:]]*;?[[:space:]]*$' "$INIT" || true; } > "$INIT.tmp"
+    if ! cmp -s "$INIT" "$INIT.tmp"; then echo "removed require(\"broadcast\") from $INIT"; fi
+    mv "$INIT.tmp" "$INIT"
+    if grep -qF 'broadcast' "$INIT"; then
+      echo "$INIT still mentions broadcast; remove that by hand."
+    fi
   fi
   reload
   exit 0
@@ -62,7 +79,14 @@ for f in $FILES; do
   echo "linked $target -> $REPO/$f"
 done
 
-if [ ! -f "$INIT" ] || ! grep -qxF "$REQUIRE" "$INIT"; then
+# Replace the line older versions added.
+if [ -f "$INIT" ] && grep -qxF "$OLD_REQUIRE" "$INIT"; then
+  remove_line "$OLD_REQUIRE"
+  echo "removed old $OLD_REQUIRE from $INIT"
+fi
+
+# Leave init.lua alone if it already calls setup, perhaps with options.
+if [ ! -f "$INIT" ] || ! grep -qF 'require("broadcast").setup' "$INIT"; then
   echo "$REQUIRE" >> "$INIT"
   echo "added $REQUIRE to $INIT"
 fi
