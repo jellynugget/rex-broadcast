@@ -171,7 +171,11 @@ end
 -- icon next to the header buttons, so the label carries the mark.
 local function mark(block)
   if state.labels[block.block_id] ~= nil then return end
-  state.labels[block.block_id] = block.label or ""
+  local old = block.label or ""
+  -- A label that already has the mark was left by a broadcast whose state
+  -- was lost; putting it back would leave the mark stuck, so use the default.
+  if old:find(ICON, 1, true) then old = "" end
+  state.labels[block.block_id] = old
   set_label(state.session_id, block.block_id, marked_label(pane_name(block.block_id)))
   save_state()
 end

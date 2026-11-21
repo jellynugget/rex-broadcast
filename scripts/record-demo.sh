@@ -57,8 +57,11 @@ window_size() {  # window_size [W H]: print, or set, the main window's size
   fi
 }
 
+recorder=""
+
 restore() {
   echo "restoring"
+  if [[ -n $recorder ]]; then touch "$work/stop"; wait "$recorder" 2>/dev/null; fi
   if [[ -n $session ]]; then "$rex" send-key -s "$session" escape >/dev/null 2>&1; fi
   if [[ $sidebar_hidden -eq 1 ]]; then perform zz_demo_sidebar; fi
   if [[ -n $old_size ]]; then window_size "${old_size%,*}" "${old_size#*,}"; fi
@@ -119,9 +122,9 @@ rex.action{ name = "zz_demo_sidebar", title = "Demo: toggle sidebar", run = func
 EOF
 echo "$helper_line" >> "$init"
 "$rex" config reload >/dev/null || exit 1
+old_size=$(window_size)
 perform zz_demo_show
 perform zz_demo_sidebar && sidebar_hidden=1
-old_size=$(window_size)
 window_size 900 520
 sleep 1.5
 
@@ -159,7 +162,7 @@ keys "tty"; "$rex" send-key -s "$session" enter >/dev/null; sleep 1.8
 "$rex" send-key -s "$session" escape >/dev/null; sleep 1.2
 keys "echo just this one"; "$rex" send-key -s "$session" enter >/dev/null; sleep 2.5
 
-touch "$work/stop"; wait "$recorder"
+touch "$work/stop"; wait "$recorder"; recorder=""
 ended=$(now)
 frames=$(find "$work/frames" -name '*.png' | wc -l | tr -d ' ')
 fps=$(awk -v n="$frames" -v a="$started" -v b="$ended" 'BEGIN { r = n / (b - a); printf "%.2f", (r > 0 ? r : 8) }')
@@ -169,4 +172,9 @@ mkdir -p "$(dirname "$out")"
 ffmpeg -loglevel error -y -framerate "$fps" -i "$work/frames/%05d.png" \
   -vf "fps=12,scale=900:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=none" \
   "$out" || exit 1
-echo "wrote $out ($(du -h "$out" | cut -f1)). Look at it before publishing."
+echo "wrote $out ($(du -h "$out" | cut -f1))"
+# The GIF is meant for a public README: check that it shows only the demo
+# panes, not the sidebar or anything else from your screen.
+open -a Preview "$out" 2>/dev/null
+read -r -p "Does it show only the demo panes? Keep it? [y/N] " answer
+if [[ $answer != [yY]* ]]; then rm -f "$out"; echo "deleted $out"; fi

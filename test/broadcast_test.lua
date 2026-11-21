@@ -438,6 +438,21 @@ do
   check("keys were broadcast", all_equal(outputs(fake, panes), "s"))
 end
 
+do
+  local fake, M, sid, wid, panes = tab(2)
+  fake:pane(panes[2]).label = "api"
+  fake:press("cmd+shift+i")
+  os.remove(state_file)  -- lost while the panes still show the mark
+  M = reload(fake)
+  check("with the state file gone, broadcasting is off", not M.active())
+  fake:press("cmd+shift+i")
+  fake:press("escape")
+  check("a label still showing an old mark isn't put back with the mark",
+    not contains(fake:pane(panes[1]).label, ICON) and not contains(fake:pane(panes[2]).label, ICON),
+    fake:pane(panes[2]).label)
+  check("it gets the default label instead", fake:pane(panes[2]).label == "shell")
+end
+
 ------------------------------------------------------------------------------
 section("after a server restart")
 do

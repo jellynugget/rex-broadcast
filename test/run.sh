@@ -33,7 +33,9 @@ fi
 step "install.sh syntax" sh -n install.sh
 
 if command -v shellcheck >/dev/null 2>&1; then
-  step shellcheck shellcheck install.sh test/run.sh test/e2e.sh
+  # Warnings and errors only; info notes such as "function only called
+  # indirectly" don't fail the build.
+  step shellcheck shellcheck --severity=warning install.sh test/run.sh test/e2e.sh scripts/record-demo.sh
 else
   echo "skip: shellcheck is not installed"
 fi
