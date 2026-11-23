@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Runs the checks that don't need Rex: the Lua tests against a fake rex,
-# shellcheck on the scripts, and a syntax check of install.sh. Exits non-zero
-# if any of them fails. CI runs this.
+# Runs the checks that don't need Rex: the Lua tests against a fake rex, a
+# syntax check of install.sh, and a lint of the scripts with shellcheck. Exits
+# non-zero if any of them fails. CI runs this.
 #
 #   bash test/run.sh
 #

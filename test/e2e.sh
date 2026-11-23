@@ -96,7 +96,7 @@ showing() { [[ $(panes_showing "$1") -eq $2 ]]; }
 echo "Rex's own Lua"
 # Rex runs its own Lua 5.1, not LuaJIT; check the UTF-8 handling there too.
 long_label_chars() {
-  [[ $("$rex" do -e "local M = dofile('$root/broadcast.lua')
+  [[ $("$rex" "do" -e "local M = dofile('$root/broadcast.lua')
     local label = M.marked_label(string.rep('\\228\\184\\173', 200))
     local n = 0
     for _ in label:gmatch('[%z\\1-\\127\\194-\\244][\\128-\\191]*') do n = n + 1 end
