@@ -15,7 +15,7 @@
 #      and makes the window smaller;
 #   4. presses keys with `rex send-key` while taking screenshots;
 #   5. puts everything back, closing only the tab it made, then builds the
-#      GIF and asks you to check it.
+#      GIF, with a caption showing each ⇧⌘I press, and asks you to check it.
 #
 # Needs macOS, ffmpeg, swift (Xcode command line tools), broadcast.lua
 # installed with the default keys, and Accessibility access for your terminal
@@ -190,11 +190,14 @@ keys() {  # keys TEXT: type TEXT one key at a time
   done
 }
 
+# Seconds into the recording of each cmd+shift+i press, for the captions.
+since() { awk -v a="$started" -v b="$(now)" 'BEGIN { printf "%.2f", b - a }'; }
+
 sleep 1.2
-key cmd+shift+i; sleep 1.5
+t_start=$(since); key cmd+shift+i; sleep 1.5
 keys "echo hello from every pane"; key enter; sleep 1.2
 keys "tty"; key enter; sleep 1.8
-key cmd+shift+i; sleep 1.2
+t_stop=$(since); key cmd+shift+i; sleep 1.2
 keys "echo just this one"; key enter; sleep 2.5
 
 touch "$work/stop"; wait "$recorder"; recorder=""
@@ -211,9 +214,48 @@ if [[ $typed -eq 0 ]]; then
   exit 1
 fi
 
+# Draw the key captions with AppKit (Homebrew's ffmpeg has no drawtext).
+caption() {  # caption KEY TEXT SIZE OUT.png
+  swift - "$@" <<'EOF'
+import AppKit
+let a = CommandLine.arguments
+let key = a[1], text = a[2], size = CGFloat(Double(a[3])!), out = a[4]
+let keyStr = NSAttributedString(string: key, attributes: [
+  .font: NSFont.systemFont(ofSize: size, weight: .bold), .foregroundColor: NSColor.black])
+let textStr = NSAttributedString(string: text, attributes: [
+  .font: NSFont.systemFont(ofSize: size * 0.8, weight: .medium), .foregroundColor: NSColor.white])
+let ks = keyStr.size(), ts = textStr.size()
+let pad = size * 0.45, capPadX = size * 0.4, capPadY = size * 0.12, gap = size * 0.5
+let capW = ks.width + 2 * capPadX, capH = ks.height + 2 * capPadY
+let w = ceil(pad + capW + gap + ts.width + pad * 1.4), h = ceil(capH + 2 * pad)
+let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(w), pixelsHigh: Int(h),
+  bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+  colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+NSGraphicsContext.saveGraphicsState()
+NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+NSColor(white: 0.08, alpha: 0.88).setFill()
+NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: w, height: h), xRadius: h * 0.3, yRadius: h * 0.3).fill()
+NSColor(white: 0.95, alpha: 1).setFill()
+NSBezierPath(roundedRect: NSRect(x: pad, y: pad, width: capW, height: capH),
+  xRadius: size * 0.25, yRadius: size * 0.25).fill()
+keyStr.draw(at: NSPoint(x: pad + capPadX, y: pad + capPadY))
+textStr.draw(at: NSPoint(x: pad + capW + gap, y: (h - ts.height) / 2))
+NSGraphicsContext.restoreGraphicsState()
+try! rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: out))
+EOF
+}
+width=$(sips -g pixelWidth "$work/frames/00001.png" | awk '/pixelWidth/ { print $2 }')
+size=$(awk -v w="$width" 'BEGIN { printf "%.0f", w * 0.027 }')
+caption "⇧⌘I" "Start broadcasting" "$size" "$work/start.png" &&
+  caption "⇧⌘I" "Stop broadcasting" "$size" "$work/stop.png" || exit 1
+# Each caption shows from its key press for 1.6 seconds, at the bottom.
+at='x=(W-w)/2:y=H-h-H*0.05'
+show() { awk -v t="$1" 'BEGIN { printf "between(t,%.2f,%.2f)", t, t + 1.6 }'; }
+
 mkdir -p "$(dirname "$out")"
 ffmpeg -loglevel error -y -framerate "$fps" -i "$work/frames/%05d.png" \
-  -vf "fps=10,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=none" \
+  -i "$work/start.png" -i "$work/stop.png" -filter_complex \
+  "[0:v][1:v]overlay=$at:enable='$(show "$t_start")'[v1];[v1][2:v]overlay=$at:enable='$(show "$t_stop")',fps=10,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=none" \
   "$out" || exit 1
 echo "wrote $out ($(du -h "$out" | cut -f1))"
 
