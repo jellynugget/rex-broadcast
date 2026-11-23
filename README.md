@@ -6,8 +6,6 @@ Broadcast input for [Rex](https://www.superlogical.com/rex), the terminal from
 Superlogical: type once, and every terminal pane in the current tab gets the
 same keys. It is like `synchronize-panes` in tmux or Broadcast Input in iTerm2.
 
-![Typing once into three panes with rex-broadcast](docs/demo.gif)
-
 It is a Rex config module (Lua), not a separate program.
 
 ## Use
